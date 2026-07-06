@@ -4,15 +4,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-This repo is a single self-contained tic-tac-toe game: `tic-tac-toe.html`. There is no build system, package manager, bundler, test suite, or linter — HTML, CSS, and JavaScript all live inline in that one file.
+This repo contains browser games. Tic-tac-toe is a self-contained single HTML file with no build step. UNO is a Vite + React + TypeScript webapp in `uno-app/`.
 
-## Running the game
+Games:
 
-Open `tic-tac-toe.html` directly in a browser (e.g. `open tic-tac-toe.html` on macOS). There is no dev server or build step.
+- `tic-tac-toe.html` — two-player tic-tac-toe on one device
+- `uno-app/` — Uno vs a CPU opponent (retro 8-bit pixel style)
+
+## Running a game
+
+**Standalone HTML:** Open any game file directly in a browser (e.g. `open tic-tac-toe.html` on macOS). No dev server or build step.
+
+**React UNO app:**
+
+```bash
+cd uno-app
+npm install
+npm run dev    # dev server (default http://localhost:5173)
+npm run build  # production build to uno-app/dist/
+```
 
 ## Architecture
 
-Everything is in `tic-tac-toe.html`, structured in three inline sections:
+Each game follows the same pattern: three inline sections in one file.
+
+### tic-tac-toe.html
 
 - **`<style>`**: Uses CSS custom properties (`--bg`, `--text`, `--accent-x`, `--accent-o`, etc.) defined in `:root` and overridden in an `@media (prefers-color-scheme: dark)` block, so light/dark theming stays centralized in one place rather than scattered across selectors.
 - **Board markup**: The `.board` grid container starts empty in HTML and is populated entirely by JS (`render()`), not hand-authored — the 9 `.cell` buttons are generated dynamically from the `cells` array on every render.
@@ -21,6 +37,16 @@ Everything is in `tic-tac-toe.html`, structured in three inline sections:
   - `checkWinner()` checks `WIN_LINES` (all 8 winning triples) against `cells`, returning a winner, a tie, or `null`.
   - `makeMove(i)` mutates state, advances turns, and re-renders; win highlighting is applied as a second pass after `render()` (adding the `.win` class to cells in the winning line), since `render()` wipes and recreates all cell elements.
   - Scores (`X`/`O`/tie counts) persist across rounds via `resetBoard()` but reset on a full page reload (no `localStorage`).
+
+### uno-app/
+
+Uno vs a CPU opponent with retro styling and the same rules as standard Uno.
+
+- **Stack**: Vite, React 19, TypeScript. CSS in `src/styles/global.css` (retro NES-style palette, Press Start 2P font).
+- **Game logic**: Pure modules in `src/game/` (`deck.ts`, `rules.ts`, `cpu.ts`) with immutable state updates.
+- **State**: `useUnoGame` hook in `src/hooks/useUnoGame.ts` — holds game state, CPU/UNO grace timers, and player actions.
+- **UI**: Declarative components in `src/components/` (`UnoGame`, `Card`, `HumanHand`, overlays, etc.).
+- **Types**: `src/types/game.ts` — `Card`, `Player`, `GameState`, etc.
 
 ## Repo conventions
 
