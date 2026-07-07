@@ -6,9 +6,9 @@ type OscType = OscillatorType;
 type SoundPackId = 'default' | 'john-pork';
 
 const JOHN_PORK_SAMPLES = {
-  short: '/sounds/john-pork/oink-short.mp3',
-  fart: '/sounds/john-pork/fart-quick.mp3',
-  alt: '/sounds/john-pork/oink-alt.mp3',
+  short: `${import.meta.env.BASE_URL}sounds/john-pork/oink-short.mp3`,
+  fart: `${import.meta.env.BASE_URL}sounds/john-pork/fart-quick.mp3`,
+  alt: `${import.meta.env.BASE_URL}sounds/john-pork/oink-alt.mp3`,
 } as const;
 
 let ctx: AudioContext | null = null;
@@ -27,12 +27,31 @@ function getContext(): AudioContext {
   return ctx;
 }
 
+/** Runs playback once the audio context is running, resuming first if needed. */
+function withRunningAudio(play: (audio: AudioContext) => void): void {
+  const audio = getContext();
+  if (audio.state === 'running') {
+    play(audio);
+    return;
+  }
+
+  if (audio.state === 'suspended') {
+    void audio.resume().then(() => {
+      if (audio.state === 'running') {
+        play(audio);
+      }
+    });
+  }
+}
+
 /** Resume audio after a user gesture (required by browser autoplay policies). */
 export function unlockAudio(): void {
   const audio = getContext();
-  if (audio.state === 'suspended') {
-    void audio.resume();
-  }
+  void audio.resume().then(() => {
+    if (activePack === 'john-pork') {
+      void preloadJohnPorkSamples();
+    }
+  });
 }
 
 /** Switches the active sound pack to match the given visual theme. */
@@ -40,14 +59,16 @@ export function setSoundTheme(theme: ThemeId): void {
   const next = soundPackForTheme(theme);
   if (next === activePack) return;
   activePack = next;
-  if (next === 'john-pork') {
+  if (next === 'john-pork' && ctx?.state === 'running') {
     void preloadJohnPorkSamples();
   }
 }
 
 /** Fetches and decodes John Pork sample files into the audio cache. */
 async function preloadJohnPorkSamples(): Promise<void> {
-  const audio = getContext();
+  const audio = ctx;
+  if (!audio) return;
+
   await Promise.all(
     Object.values(JOHN_PORK_SAMPLES).map(async (url) => {
       if (sampleCache.has(url)) return;
@@ -65,22 +86,21 @@ async function preloadJohnPorkSamples(): Promise<void> {
 
 /** Plays a cached sample at the given volume, optionally after a delay. */
 function playSample(url: string, volume = 0.55, delay = 0): void {
-  const audio = getContext();
-  if (audio.state === 'suspended') return;
+  withRunningAudio((audio) => {
+    const buffer = sampleCache.get(url);
+    if (!buffer) {
+      void preloadJohnPorkSamples().then(() => playSample(url, volume, delay));
+      return;
+    }
 
-  const buffer = sampleCache.get(url);
-  if (!buffer) {
-    void preloadJohnPorkSamples().then(() => playSample(url, volume, delay));
-    return;
-  }
-
-  const source = audio.createBufferSource();
-  const gain = audio.createGain();
-  source.buffer = buffer;
-  gain.gain.setValueAtTime(volume, audio.currentTime + delay);
-  source.connect(gain);
-  gain.connect(audio.destination);
-  source.start(audio.currentTime + delay);
+    const source = audio.createBufferSource();
+    const gain = audio.createGain();
+    source.buffer = buffer;
+    gain.gain.setValueAtTime(volume, audio.currentTime + delay);
+    source.connect(gain);
+    gain.connect(audio.destination);
+    source.start(audio.currentTime + delay);
+  });
 }
 
 function playTone(
@@ -88,43 +108,41 @@ function playTone(
   duration: number,
   options: { type?: OscType; volume?: number; delay?: number } = {},
 ): void {
-  const audio = getContext();
-  if (audio.state === 'suspended') return;
+  withRunningAudio((audio) => {
+    const { type = 'square', volume = 0.12, delay = 0 } = options;
+    const start = audio.currentTime + delay;
+    const end = start + duration;
 
-  const { type = 'square', volume = 0.12, delay = 0 } = options;
-  const start = audio.currentTime + delay;
-  const end = start + duration;
-
-  const osc = audio.createOscillator();
-  const gain = audio.createGain();
-  osc.type = type;
-  osc.frequency.setValueAtTime(frequency, start);
-  gain.gain.setValueAtTime(volume, start);
-  gain.gain.exponentialRampToValueAtTime(0.001, end);
-  osc.connect(gain);
-  gain.connect(audio.destination);
-  osc.start(start);
-  osc.stop(end);
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(frequency, start);
+    gain.gain.setValueAtTime(volume, start);
+    gain.gain.exponentialRampToValueAtTime(0.001, end);
+    osc.connect(gain);
+    gain.connect(audio.destination);
+    osc.start(start);
+    osc.stop(end);
+  });
 }
 
 function playSlide(startFreq: number, endFreq: number, duration: number, volume = 0.1, delay = 0): void {
-  const audio = getContext();
-  if (audio.state === 'suspended') return;
+  withRunningAudio((audio) => {
+    const start = audio.currentTime + delay;
+    const end = start + duration;
 
-  const start = audio.currentTime + delay;
-  const end = start + duration;
-
-  const osc = audio.createOscillator();
-  const gain = audio.createGain();
-  osc.type = 'square';
-  osc.frequency.setValueAtTime(startFreq, start);
-  osc.frequency.exponentialRampToValueAtTime(endFreq, end);
-  gain.gain.setValueAtTime(volume, start);
-  gain.gain.exponentialRampToValueAtTime(0.001, end);
-  osc.connect(gain);
-  gain.connect(audio.destination);
-  osc.start(start);
-  osc.stop(end);
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(startFreq, start);
+    osc.frequency.exponentialRampToValueAtTime(endFreq, end);
+    gain.gain.setValueAtTime(volume, start);
+    gain.gain.exponentialRampToValueAtTime(0.001, end);
+    osc.connect(gain);
+    gain.connect(audio.destination);
+    osc.start(start);
+    osc.stop(end);
+  });
 }
 
 const defaultSounds = {

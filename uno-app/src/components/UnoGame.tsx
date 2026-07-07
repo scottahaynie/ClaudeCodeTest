@@ -1,5 +1,3 @@
-import { useEffect } from 'react';
-import { unlockAudio } from '../audio/sounds';
 import { useUnoGame } from '../hooks/useUnoGame';
 import { ActionButtons } from './ActionButtons';
 import { CenterArea } from './CenterArea';
@@ -12,16 +10,6 @@ import { playerAreaClass, TurnRail } from './TurnRail';
 
 export function UnoGame() {
   const game = useUnoGame();
-
-  useEffect(() => {
-    const unlock = () => unlockAudio();
-    document.addEventListener('pointerdown', unlock, { once: true });
-    document.addEventListener('keydown', unlock, { once: true });
-    return () => {
-      document.removeEventListener('pointerdown', unlock);
-      document.removeEventListener('keydown', unlock);
-    };
-  }, []);
 
   const cpuDetail =
     game.turnHighlight === 'cpu'
