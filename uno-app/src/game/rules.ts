@@ -1,3 +1,4 @@
+import { UNO_GRACE_SECONDS, unoGraceStatusMessage } from '../constants/timing';
 import { ACTION_LABELS } from './constants';
 import { createDeck, drawCards, shuffle, topDiscard } from './deck';
 import type { Card, Color, GameState, Player, TurnHighlight } from '../types/game';
@@ -116,7 +117,7 @@ export function handleUnoAfterPlay(state: GameState, player: Player): GameState 
     ...state,
     needsUno,
     unoGraceActive: true,
-    statusMessage: 'Call UNO! You have 5 seconds.',
+    statusMessage: unoGraceStatusMessage(UNO_GRACE_SECONDS),
   };
 }
 
@@ -255,7 +256,7 @@ export function getTurnHighlight(state: GameState): TurnHighlight {
 
 export function refreshUnoStatus(state: GameState): GameState {
   if (state.needsUno.human && state.hands.human.length === 1 && state.unoGraceActive) {
-    return { ...state, statusMessage: 'Call UNO! You have 5 seconds.' };
+    return { ...state, statusMessage: unoGraceStatusMessage(UNO_GRACE_SECONDS) };
   }
   return state;
 }

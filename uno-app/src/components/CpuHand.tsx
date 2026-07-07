@@ -1,3 +1,4 @@
+import { useTheme } from '../context/ThemeProvider';
 import { Card } from './Card';
 
 interface CpuHandProps {
@@ -5,14 +6,16 @@ interface CpuHandProps {
 }
 
 export function CpuHand({ cardCount }: CpuHandProps) {
+  const { cpuDisplayName } = useTheme();
+
   return (
     <>
       <div className="cpu-label">
-        CPU — {cardCount} card{cardCount === 1 ? '' : 's'}
+        {cpuDisplayName} — {cardCount} card{cardCount === 1 ? '' : 's'}
       </div>
-      <div className="hand-row">
+      <div className="hand-row" data-hand="cpu">
         {Array.from({ length: cardCount }, (_, i) => (
-          <Card key={i} back />
+          <Card key={i} back cardIndex={i} player="cpu" />
         ))}
       </div>
     </>

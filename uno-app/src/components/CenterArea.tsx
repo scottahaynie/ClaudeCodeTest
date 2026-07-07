@@ -4,9 +4,12 @@ import { Card } from './Card';
 
 interface CenterAreaProps {
   state: GameState;
+  drawDisabled: boolean;
+  onDraw: () => void;
 }
 
-export function CenterArea({ state }: CenterAreaProps) {
+/** Renders the draw/discard piles, color indicator, and status message. */
+export function CenterArea({ state, drawDisabled, onDraw }: CenterAreaProps) {
   const top = topDiscard(state.discard);
 
   return (
@@ -16,7 +19,14 @@ export function CenterArea({ state }: CenterAreaProps) {
           <div className="pile-label">DRAW</div>
           <div>
             {state.deck.length > 0 ? (
-              <Card back />
+              <Card
+                back
+                pile="draw"
+                playable={!drawDisabled}
+                disabled={drawDisabled}
+                ariaLabel="Draw a card"
+                onClick={onDraw}
+              />
             ) : (
               <div className="pile-label">EMPTY</div>
             )}
@@ -28,10 +38,10 @@ export function CenterArea({ state }: CenterAreaProps) {
         </div>
         <div className="pile-group">
           <div className="pile-label">DISCARD</div>
-          <div>{top ? <Card card={top} /> : null}</div>
+          <div>{top ? <Card card={top} pile="discard" /> : null}</div>
         </div>
       </div>
-      <div className="status-bar">{state.statusMessage}</div>
+      {state.unoGraceActive && <div className="status-bar">{state.statusMessage}</div>}
     </>
   );
 }

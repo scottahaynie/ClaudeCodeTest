@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { sounds } from '../audio/sounds';
-import { CPU_TURN_DELAY_MS, UNO_GRACE_MS } from '../game/constants';
+import { localizeCpuMessage } from '../constants/themes';
+import { useTheme } from '../context/ThemeProvider';
+import {
+  CPU_TURN_DELAY_MS,
+  UNO_GRACE_MS,
+  UNO_GRACE_SECONDS,
+  unoGraceStatusMessage,
+} from '../constants/timing';
 import { cpuBestColor, cpuChooseMove } from '../game/cpu';
 import { drawCards } from '../game/deck';
 import {
@@ -17,7 +24,15 @@ import {
   removeCardFromHand,
   resetGameState,
 } from '../game/rules';
+import type { CardMotion } from '../types/animation';
 import type { Color, GameState, Player, TurnHighlight } from '../types/game';
+import {
+  elementToRect,
+  getDiscardPileRect,
+  getDrawPileRect,
+  getHandCardRect,
+  getHandDrawTargetRect,
+} from '../utils/domRects';
 
 export interface UseUnoGameReturn {
   state: GameState;
@@ -30,7 +45,11 @@ export interface UseUnoGameReturn {
   showGameOver: boolean;
   gameOverTitle: string;
   gameOverMsg: string;
+  isAnimating: boolean;
+  activeMotion: CardMotion | null;
+  completeMotion: () => void;
   playCard: (player: Player, cardIndex: number, chosenColor?: Color) => void;
+  playHumanCard: (cardIndex: number, sourceEl?: HTMLElement) => void;
   humanDraw: () => void;
   humanCallUno: () => void;
   endHumanTurnWithoutPlay: () => void;
@@ -57,13 +76,55 @@ function playCardSfx(before: GameState, after: GameState, player: Player): void 
 }
 
 export function useUnoGame(): UseUnoGameReturn {
+  const { cpuDisplayName } = useTheme();
   const [state, setState] = useState<GameState>(() => resetGameState());
+  const [activeMotion, setActiveMotion] = useState<CardMotion | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
 
   const cpuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unoGraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unoGraceCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const unoGraceSecondsRef = useRef(UNO_GRACE_SECONDS);
   const wasGameOverRef = useRef(false);
+  const motionIdRef = useRef(0);
+  const motionQueueRef = useRef<{ motion: CardMotion; resolve: () => void }[]>([]);
+  const motionResolveRef = useRef<(() => void) | null>(null);
+  const isAnimatingRef = useRef(false);
+
+  /**
+   * Queues a card motion and resolves when the animation finishes.
+   */
+  const playMotion = useCallback((motion: Omit<CardMotion, 'id'>): Promise<void> => {
+    return new Promise((resolve) => {
+      const full: CardMotion = { ...motion, id: ++motionIdRef.current };
+      if (isAnimatingRef.current) {
+        motionQueueRef.current.push({ motion: full, resolve });
+        return;
+      }
+      isAnimatingRef.current = true;
+      motionResolveRef.current = resolve;
+      setActiveMotion(full);
+    });
+  }, []);
+
+  /**
+   * Advances the motion queue after the current animation completes.
+   */
+  const completeMotion = useCallback(() => {
+    motionResolveRef.current?.();
+    motionResolveRef.current = null;
+
+    const next = motionQueueRef.current.shift();
+    if (next) {
+      motionResolveRef.current = next.resolve;
+      setActiveMotion(next.motion);
+      return;
+    }
+
+    isAnimatingRef.current = false;
+    setActiveMotion(null);
+  }, []);
 
   const clearCpuTimer = useCallback(() => {
     if (cpuTimerRef.current) {
@@ -77,6 +138,10 @@ export function useUnoGame(): UseUnoGameReturn {
       clearTimeout(unoGraceTimerRef.current);
       unoGraceTimerRef.current = null;
     }
+    if (unoGraceCountdownRef.current) {
+      clearInterval(unoGraceCountdownRef.current);
+      unoGraceCountdownRef.current = null;
+    }
   }, []);
 
   const runCpuTurn = useCallback(() => {
@@ -84,72 +149,112 @@ export function useUnoGame(): UseUnoGameReturn {
     const current = stateRef.current;
     if (current.gameOver || current.currentPlayer !== 'cpu' || current.wildPending) return;
 
-    let next: GameState = { ...current, cpuThinking: false };
+    const executeCpuMove = async () => {
+      let next: GameState = { ...current, cpuThinking: false };
 
-    if (next.pendingDraw > 0) {
-      const n = next.pendingDraw;
-      const drawn = drawCards(next.deck, next.discard, next.hands, 'cpu', n);
-      next = advanceTurn(
-        {
+      if (next.pendingDraw > 0) {
+        const n = next.pendingDraw;
+        let deck = next.deck;
+        let discard = next.discard;
+        let hands = next.hands;
+        for (let i = 0; i < n; i++) {
+          const drawn = drawCards(deck, discard, hands, 'cpu', 1);
+          deck = drawn.deck;
+          discard = drawn.discard;
+          hands = drawn.hands;
+          const card = drawn.drawn[0];
+          if (!card) break;
+          await playMotion({
+            type: 'draw',
+            player: 'cpu',
+            card,
+            faceDown: true,
+            handSize: hands.cpu.length - 1,
+          });
+        }
+        sounds.draw(n);
+        setState(
+          advanceTurn(
+            {
+              ...next,
+              deck,
+              discard,
+              hands,
+              pendingDraw: 0,
+              statusMessage: `CPU draws ${n} and loses turn.`,
+            },
+            1,
+          ),
+        );
+        return;
+      }
+
+      const move = cpuChooseMove(next);
+      if (move.action === 'draw') {
+        const drawn = drawCards(next.deck, next.discard, next.hands, 'cpu', 1);
+        const card = drawn.drawn[0];
+        if (card) {
+          await playMotion({
+            type: 'draw',
+            player: 'cpu',
+            card,
+            faceDown: true,
+            handSize: next.hands.cpu.length,
+          });
+        }
+        sounds.draw(1);
+        setState(
+          advanceTurn(
+            {
+              ...next,
+              deck: drawn.deck,
+              discard: drawn.discard,
+              hands: drawn.hands,
+              statusMessage: 'CPU draws a card.',
+            },
+            1,
+          ),
+        );
+        return;
+      }
+
+      const card = move.card;
+      await playMotion({
+        type: 'play',
+        player: 'cpu',
+        card,
+        faceDown: true,
+      });
+
+      if (isWildCard(card)) {
+        const color = cpuBestColor(next.hands);
+        const removed = removeCardFromHand(next.hands, 'cpu', move.index);
+        next = {
           ...next,
-          deck: drawn.deck,
-          discard: drawn.discard,
-          hands: drawn.hands,
-          pendingDraw: 0,
-          statusMessage: `CPU draws ${n} and loses turn.`,
-        },
-        1,
-      );
-      sounds.draw(n);
-      setState(next);
-      return;
-    }
+          hands: removed.hands,
+          discard: [...next.discard, removed.card],
+        };
+        const resolved = resolveAfterPlay(next, 'cpu', removed.card, color);
+        playCardSfx(current, resolved, 'cpu');
+        setState(resolved);
+        return;
+      }
 
-    const move = cpuChooseMove(next);
-    if (move.action === 'draw') {
-      const drawn = drawCards(next.deck, next.discard, next.hands, 'cpu', 1);
-      next = advanceTurn(
-        {
-          ...next,
-          deck: drawn.deck,
-          discard: drawn.discard,
-          hands: drawn.hands,
-          statusMessage: 'CPU draws a card.',
-        },
-        1,
-      );
-      sounds.draw(1);
-      setState(next);
-      return;
-    }
-
-    const card = move.card;
-    if (isWildCard(card)) {
-      const color = cpuBestColor(next.hands);
       const removed = removeCardFromHand(next.hands, 'cpu', move.index);
+      if (!isPlayable(removed.card, 'cpu', next, next.hands)) return;
+
       next = {
         ...next,
         hands: removed.hands,
         discard: [...next.discard, removed.card],
       };
-      const resolved = resolveAfterPlay(next, 'cpu', removed.card, color);
+      const resolved = resolveAfterPlay(next, 'cpu', removed.card, removed.card.color as Color);
       playCardSfx(current, resolved, 'cpu');
       setState(resolved);
-      return;
-    }
-
-    const removed = removeCardFromHand(next.hands, 'cpu', move.index);
-    if (!isPlayable(removed.card, 'cpu', next, next.hands)) return;
-
-    next = {
-      ...next,
-      hands: removed.hands,
-      discard: [...next.discard, removed.card],
     };
-    const resolved = resolveAfterPlay(next, 'cpu', removed.card, removed.card.color as Color);
-    playCardSfx(current, resolved, 'cpu');
-    setState(resolved);
-  }, []);
+
+    void executeCpuMove();
+  }, [playMotion]);
 
   const scheduleCpuTurn = useCallback(
     (shouldRun: boolean) => {
@@ -184,13 +289,22 @@ export function useUnoGame(): UseUnoGameReturn {
 
   const startUnoGrace = useCallback(() => {
     clearUnoGraceTimer();
+    unoGraceSecondsRef.current = UNO_GRACE_SECONDS;
     setState((s) => ({
       ...s,
       unoGraceActive: true,
-      statusMessage: 'Call UNO! You have 5 seconds.',
+      statusMessage: unoGraceStatusMessage(unoGraceSecondsRef.current),
     }));
+    unoGraceCountdownRef.current = setInterval(() => {
+      unoGraceSecondsRef.current -= 1;
+      if (unoGraceSecondsRef.current <= 0) return;
+      setState((s) => ({
+        ...s,
+        statusMessage: unoGraceStatusMessage(unoGraceSecondsRef.current),
+      }));
+    }, 1000);
     unoGraceTimerRef.current = setTimeout(() => {
-      unoGraceTimerRef.current = null;
+      clearUnoGraceTimer();
       setState((s) => {
         if (s.needsUno.human && s.hands.human.length === 1) {
           const penalty = applyUnoPenalty(s, 'human');
@@ -283,53 +397,176 @@ export function useUnoGame(): UseUnoGameReturn {
     [],
   );
 
-  const completeWildPlay = useCallback((color: Color) => {
-    setState((s) => {
-      if (!s.wildPending) return s;
-      const { player, cardIndex } = s.wildPending;
-      const card = s.hands[player][cardIndex];
-      if (!card) return { ...s, wildPending: null };
+  /**
+   * Plays a human card with a fly-to-discard animation.
+   */
+  const playHumanCard = useCallback(
+    (cardIndex: number, sourceEl?: HTMLElement) => {
+      const s = stateRef.current;
+      if (s.gameOver || s.currentPlayer !== 'human' || s.wildPending || s.cpuThinking) return;
+      const card = s.hands.human[cardIndex];
+      if (!card || !isPlayable(card, 'human', s, s.hands)) return;
 
-      const removed = removeCardFromHand(s.hands, player, cardIndex);
-      let next: GameState = {
-        ...s,
-        wildPending: null,
-        hands: removed.hands,
-        discard: [...s.discard, removed.card],
-      };
-      const resolved = resolveAfterPlay(next, player, removed.card, color);
-      playCardSfx(s, resolved, player);
-      return resolved;
-    });
-  }, []);
+      if (isWildCard(card)) {
+        setState({ ...s, wildPending: { player: 'human', cardIndex } });
+        return;
+      }
+
+      const fromRect = sourceEl
+        ? elementToRect(sourceEl)
+        : getHandCardRect('human', cardIndex);
+      const toRect = getDiscardPileRect();
+      if (!fromRect || !toRect) {
+        playCard('human', cardIndex);
+        return;
+      }
+
+      void playMotion({
+        type: 'play',
+        player: 'human',
+        card,
+        handIndex: cardIndex,
+        fromRect,
+        toRect,
+      }).then(() => playCard('human', cardIndex));
+    },
+    [playCard, playMotion],
+  );
+
+  const completeWildPlay = useCallback(
+    (color: Color) => {
+      const s = stateRef.current;
+      if (!s.wildPending || s.wildPending.player !== 'human') return;
+      const { cardIndex } = s.wildPending;
+      const card = s.hands.human[cardIndex];
+      if (!card) {
+        setState({ ...s, wildPending: null });
+        return;
+      }
+
+      const fromRect = getHandCardRect('human', cardIndex);
+      const toRect = getDiscardPileRect();
+      if (!fromRect || !toRect) {
+        setState((prev) => {
+          if (!prev.wildPending) return prev;
+          const { player, cardIndex: idx } = prev.wildPending;
+          const wildCard = prev.hands[player][idx];
+          if (!wildCard) return { ...prev, wildPending: null };
+
+          const removed = removeCardFromHand(prev.hands, player, idx);
+          let next: GameState = {
+            ...prev,
+            wildPending: null,
+            hands: removed.hands,
+            discard: [...prev.discard, removed.card],
+          };
+          const resolved = resolveAfterPlay(next, player, removed.card, color);
+          playCardSfx(prev, resolved, player);
+          return resolved;
+        });
+        return;
+      }
+
+      void playMotion({
+        type: 'play',
+        player: 'human',
+        card,
+        handIndex: cardIndex,
+        fromRect,
+        toRect,
+      }).then(() => {
+        setState((prev) => {
+          if (!prev.wildPending) return prev;
+          const { player, cardIndex: idx } = prev.wildPending;
+          const wildCard = prev.hands[player][idx];
+          if (!wildCard) return { ...prev, wildPending: null };
+
+          const removed = removeCardFromHand(prev.hands, player, idx);
+          let next: GameState = {
+            ...prev,
+            wildPending: null,
+            hands: removed.hands,
+            discard: [...prev.discard, removed.card],
+          };
+          const resolved = resolveAfterPlay(next, player, removed.card, color);
+          playCardSfx(prev, resolved, player);
+          return resolved;
+        });
+      });
+    },
+    [playMotion],
+  );
 
   const humanDraw = useCallback(() => {
-    setState((s) => {
-      if (s.gameOver || s.currentPlayer !== 'human' || s.wildPending || s.cpuThinking || s.humanDrewThisTurn) {
-        return s;
-      }
-      const drawn = drawCards(s.deck, s.discard, s.hands, 'human', 1);
-      if (drawn.drawn.length === 0) {
-        return { ...s, statusMessage: 'No cards left to draw!' };
-      }
-      sounds.draw(1);
-      const card = drawn.drawn[0];
-      const next: GameState = {
-        ...s,
-        deck: drawn.deck,
-        discard: drawn.discard,
-        hands: drawn.hands,
-        humanDrewThisTurn: true,
-      };
-      if (isPlayable(card, 'human', next, next.hands)) {
-        return { ...next, statusMessage: 'Drew a card — play it or end turn.' };
-      }
-      return advanceTurn(
-        { ...next, statusMessage: 'Drew a card — no play. Turn over.' },
-        1,
-      );
+    const s = stateRef.current;
+    if (s.gameOver || s.currentPlayer !== 'human' || s.wildPending || s.cpuThinking || s.humanDrewThisTurn) {
+      return;
+    }
+    const drawn = drawCards(s.deck, s.discard, s.hands, 'human', 1);
+    if (drawn.drawn.length === 0) {
+      setState({ ...s, statusMessage: 'No cards left to draw!' });
+      return;
+    }
+    const card = drawn.drawn[0];
+    sounds.draw(1);
+
+    const fromRect = getDrawPileRect();
+    const toRect = getHandDrawTargetRect('human', s.hands.human.length);
+    if (!fromRect || !toRect) {
+      setState((prev) => {
+        if (prev.gameOver || prev.currentPlayer !== 'human') return prev;
+        const freshDraw = drawCards(prev.deck, prev.discard, prev.hands, 'human', 1);
+        if (freshDraw.drawn.length === 0) return prev;
+        const drawnCard = freshDraw.drawn[0];
+        const next: GameState = {
+          ...prev,
+          deck: freshDraw.deck,
+          discard: freshDraw.discard,
+          hands: freshDraw.hands,
+          humanDrewThisTurn: true,
+        };
+        if (isPlayable(drawnCard, 'human', next, next.hands)) {
+          return { ...next, statusMessage: 'Drew a card — play it or end turn.' };
+        }
+        return advanceTurn(
+          { ...next, statusMessage: 'Drew a card — no play. Turn over.' },
+          1,
+        );
+      });
+      return;
+    }
+
+    void playMotion({
+      type: 'draw',
+      player: 'human',
+      card,
+      faceDown: true,
+      handSize: s.hands.human.length,
+      fromRect,
+      toRect,
+    }).then(() => {
+      setState((prev) => {
+        if (prev.gameOver || prev.currentPlayer !== 'human') return prev;
+        const freshDraw = drawCards(prev.deck, prev.discard, prev.hands, 'human', 1);
+        if (freshDraw.drawn.length === 0) return prev;
+        const drawnCard = freshDraw.drawn[0];
+        const next: GameState = {
+          ...prev,
+          deck: freshDraw.deck,
+          discard: freshDraw.discard,
+          hands: freshDraw.hands,
+          humanDrewThisTurn: true,
+        };
+        if (isPlayable(drawnCard, 'human', next, next.hands)) {
+          return { ...next, statusMessage: 'Drew a card — play it or end turn.' };
+        }
+        return advanceTurn(
+          { ...next, statusMessage: 'Drew a card — no play. Turn over.' },
+          1,
+        );
+      });
     });
-  }, []);
+  }, [playMotion]);
 
   const humanCallUno = useCallback(() => {
     clearUnoGraceTimer();
@@ -355,6 +592,10 @@ export function useUnoGame(): UseUnoGameReturn {
   const newGame = useCallback(() => {
     clearCpuTimer();
     clearUnoGraceTimer();
+    motionQueueRef.current = [];
+    motionResolveRef.current = null;
+    isAnimatingRef.current = false;
+    setActiveMotion(null);
     setState(resetGameState());
     sounds.gameStart();
   }, [clearCpuTimer, clearUnoGraceTimer]);
@@ -384,22 +625,28 @@ export function useUnoGame(): UseUnoGameReturn {
   const turnHighlight = getTurnHighlight(state);
   const humanTurn =
     state.currentPlayer === 'human' && !state.gameOver && !state.cpuThinking && !state.wildPending;
+  const isAnimating = activeMotion != null;
   const canPass =
-    humanTurn && state.humanDrewThisTurn && state.hands.human.some((c) => isPlayable(c, 'human', state, state.hands));
-  const drawDisabled = !humanTurn || state.humanDrewThisTurn || state.pendingDraw > 0;
+    humanTurn && !isAnimating && state.humanDrewThisTurn && state.hands.human.some((c) => isPlayable(c, 'human', state, state.hands));
+  const drawDisabled = !humanTurn || isAnimating || state.humanDrewThisTurn || state.pendingDraw > 0;
   const unoDisabled = !(state.hands.human.length === 1 && state.needsUno.human);
   const unoPulse = state.hands.human.length === 1 && state.needsUno.human;
   const showColorOverlay = !!(state.wildPending && state.wildPending.player === 'human');
   const showGameOver = state.gameOver;
-  const gameOverTitle = state.winner === 'human' ? 'YOU WIN!' : 'CPU WINS!';
+  const gameOverTitle =
+    state.winner === 'human'
+      ? 'YOU WIN!'
+      : localizeCpuMessage('CPU WINS!', cpuDisplayName);
   const gameOverMsg =
     state.winner === 'human' ? 'Nice! You emptied your hand.' : 'Better luck next time!';
 
   const displayState: GameState = {
     ...state,
-    statusMessage:
+    statusMessage: localizeCpuMessage(
       state.statusMessage ||
-      (state.currentPlayer === 'human' ? 'Your turn!' : 'CPU turn...'),
+        (state.currentPlayer === 'human' ? 'Your turn!' : 'CPU turn...'),
+      cpuDisplayName,
+    ),
   };
 
   return {
@@ -413,7 +660,11 @@ export function useUnoGame(): UseUnoGameReturn {
     showGameOver,
     gameOverTitle,
     gameOverMsg,
+    isAnimating,
+    activeMotion,
+    completeMotion,
     playCard,
+    playHumanCard,
     humanDraw,
     humanCallUno,
     endHumanTurnWithoutPlay,

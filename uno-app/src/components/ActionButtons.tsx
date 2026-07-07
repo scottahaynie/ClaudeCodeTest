@@ -1,29 +1,23 @@
 interface ActionButtonsProps {
-  drawDisabled: boolean;
   canPass: boolean;
   unoDisabled: boolean;
   unoPulse: boolean;
-  onDraw: () => void;
   onPass: () => void;
   onUno: () => void;
   onNewGame: () => void;
 }
 
+/** Bottom action bar for pass, UNO, and new game controls. */
 export function ActionButtons({
-  drawDisabled,
   canPass,
   unoDisabled,
   unoPulse,
-  onDraw,
   onPass,
   onUno,
   onNewGame,
 }: ActionButtonsProps) {
   return (
     <div className="actions">
-      <button className="btn primary" disabled={drawDisabled} onClick={onDraw}>
-        DRAW
-      </button>
       {canPass && (
         <button className="btn" onClick={onPass}>
           PASS

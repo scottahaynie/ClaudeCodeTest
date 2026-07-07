@@ -1,3 +1,4 @@
+import { useTheme } from '../context/ThemeProvider';
 import type { TurnHighlight } from '../types/game';
 
 interface TurnRailProps {
@@ -7,6 +8,7 @@ interface TurnRailProps {
 }
 
 export function TurnRail({ highlight, cpuDetail, humanDetail }: TurnRailProps) {
+  const { cpuDisplayName } = useTheme();
   const cpuClass = 'turn-slot cpu' + (highlight === 'cpu' ? ' active' : '');
   const humanClass =
     'turn-slot human' +
@@ -17,7 +19,7 @@ export function TurnRail({ highlight, cpuDetail, humanDetail }: TurnRailProps) {
     <div className="turn-rail">
       <div className={cpuClass}>
         <span className="turn-slot-label">OPPONENT</span>
-        <span className="turn-slot-name">CPU</span>
+        <span className="turn-slot-name">{cpuDisplayName}</span>
         <span className="turn-slot-detail">{cpuDetail}</span>
       </div>
       <div className={humanClass}>

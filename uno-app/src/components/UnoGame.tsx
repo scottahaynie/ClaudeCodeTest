@@ -5,6 +5,7 @@ import { ActionButtons } from './ActionButtons';
 import { CenterArea } from './CenterArea';
 import { ColorOverlay } from './ColorOverlay';
 import { CpuHand } from './CpuHand';
+import { FlyingCardLayer } from './FlyingCardLayer';
 import { GameOverOverlay } from './GameOverOverlay';
 import { HumanHand } from './HumanHand';
 import { playerAreaClass, TurnRail } from './TurnRail';
@@ -49,19 +50,26 @@ export function UnoGame() {
             </div>
           </div>
           <div className="game-zone middle-zone">
-            <CenterArea state={game.state} />
+            <CenterArea
+              state={game.state}
+              drawDisabled={game.drawDisabled}
+              onDraw={game.humanDraw}
+            />
           </div>
           <div className="game-zone human-zone">
             <div className={playerAreaClass(game.turnHighlight, 'human')}>
-              <HumanHand state={game.state} onPlay={(i) => game.playCard('human', i)} />
+              <HumanHand
+                state={game.state}
+                disabled={game.isAnimating}
+                activeMotion={game.activeMotion}
+                onPlay={game.playHumanCard}
+              />
             </div>
           </div>
           <ActionButtons
-            drawDisabled={game.drawDisabled}
             canPass={game.canPass}
             unoDisabled={game.unoDisabled}
             unoPulse={game.unoPulse}
-            onDraw={game.humanDraw}
             onPass={game.endHumanTurnWithoutPlay}
             onUno={game.humanCallUno}
             onNewGame={game.newGame}
@@ -69,7 +77,11 @@ export function UnoGame() {
         </div>
       </div>
 
-      <ColorOverlay visible={game.showColorOverlay} onPick={game.completeWildPlay} />
+      <ColorOverlay
+        visible={game.showColorOverlay && !game.isAnimating}
+        onPick={game.completeWildPlay}
+      />
+      <FlyingCardLayer motion={game.activeMotion} onComplete={game.completeMotion} />
       <GameOverOverlay
         visible={game.showGameOver}
         title={game.gameOverTitle}

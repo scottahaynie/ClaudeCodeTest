@@ -1,0 +1,5 @@
+---
+alwaysApply: true
+---
+
+always generate docstrings for functions

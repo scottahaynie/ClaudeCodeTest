@@ -1,0 +1,396 @@
+[data-theme="retro"] {
+  color-scheme: light dark;
+  --bg: #eef0f8;
+  --panel: #ffffff;
+  --text: #1a1a2e;
+  --muted: #5a5a72;
+  --red: #e52521;
+  --blue: #0066cc;
+  --green: #009933;
+  --yellow: #ffcc00;
+  --black: #000000;
+  --shadow: #b0b4c8;
+  --card-w: 64px;
+  --card-h: 96px;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="retro"] {
+    --bg: #1a1a2e;
+    --panel: #16213e;
+    --text: #eaeaea;
+    --muted: #8888aa;
+    --shadow: #0f0f1a;
+  }
+}
+
+[data-theme="retro"] body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+[data-theme="retro"] h1 {
+  font-size: 18px;
+  color: var(--yellow);
+  text-shadow: 3px 3px 0 var(--black);
+}
+
+[data-theme="retro"] .cpu-label {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+[data-theme="retro"] .pile-label {
+  font-size: 7px;
+  color: var(--muted);
+}
+
+[data-theme="retro"] .card {
+  border: 3px solid var(--black);
+  box-shadow: 4px 4px 0 var(--shadow);
+  font-size: 11px;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+[data-theme="retro"] .card.red {
+  background: var(--red);
+  color: #fff;
+}
+
+[data-theme="retro"] .card.blue {
+  background: var(--blue);
+  color: #fff;
+}
+
+[data-theme="retro"] .card.green {
+  background: var(--green);
+  color: #fff;
+}
+
+[data-theme="retro"] .card.yellow {
+  background: var(--yellow);
+  color: var(--black);
+}
+
+[data-theme="retro"] .card.wild-face {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--red),
+    var(--red) 6px,
+    var(--blue) 6px,
+    var(--blue) 12px,
+    var(--green) 12px,
+    var(--green) 18px,
+    var(--yellow) 18px,
+    var(--yellow) 24px
+  );
+  color: #fff;
+  text-shadow: 1px 1px 0 var(--black), -1px -1px 0 var(--black);
+}
+
+[data-theme="retro"] .card.back {
+  background:
+    repeating-linear-gradient(0deg, var(--red) 0 4px, transparent 4px 8px),
+    repeating-linear-gradient(90deg, var(--blue) 0 4px, transparent 4px 8px),
+    var(--panel);
+}
+
+[data-theme="retro"] .card.back:not(.playable):not(.disabled) {
+  cursor: default;
+}
+
+[data-theme="retro"] .card.playable {
+  cursor: pointer;
+}
+
+[data-theme="retro"] .card.playable:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 var(--shadow);
+}
+
+[data-theme="retro"] .card.playable:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--shadow);
+}
+
+[data-theme="retro"] .card.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+[data-theme="retro"] .card .symbol {
+  font-size: 18px;
+}
+
+[data-theme="retro"] .card .card-icon {
+  width: 30px;
+  height: 30px;
+  stroke-width: 2.5;
+}
+
+[data-theme="retro"] .color-indicator {
+  border: 3px solid var(--black);
+  box-shadow: 3px 3px 0 var(--shadow);
+}
+
+[data-theme="retro"] .color-indicator.red {
+  background: var(--red);
+}
+
+[data-theme="retro"] .color-indicator.blue {
+  background: var(--blue);
+}
+
+[data-theme="retro"] .color-indicator.green {
+  background: var(--green);
+}
+
+[data-theme="retro"] .color-indicator.yellow {
+  background: var(--yellow);
+}
+
+[data-theme="retro"] .status-bar {
+  background: var(--panel);
+  border: 3px solid var(--black);
+  box-shadow: 4px 4px 0 var(--shadow);
+  font-size: 8px;
+}
+
+[data-theme="retro"] .btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  padding: 12px 16px;
+  border: 3px solid var(--black);
+  box-shadow: 4px 4px 0 var(--shadow);
+  background: var(--panel);
+  color: var(--text);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+[data-theme="retro"] .btn:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 var(--shadow);
+}
+
+[data-theme="retro"] .btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--shadow);
+}
+
+[data-theme="retro"] .btn:disabled {
+  opacity: 0.4;
+}
+
+[data-theme="retro"] .btn.primary {
+  background: var(--blue);
+  color: #fff;
+}
+
+[data-theme="retro"] .btn.uno {
+  background: var(--red);
+  color: #fff;
+}
+
+[data-theme="retro"] .btn.uno.pulse {
+  animation: retro-pulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes retro-pulse {
+  from {
+    box-shadow: 4px 4px 0 var(--shadow), 0 0 0 0 rgba(229, 37, 33, 0.6);
+  }
+  to {
+    box-shadow: 4px 4px 0 var(--shadow), 0 0 12px 4px rgba(229, 37, 33, 0.8);
+  }
+}
+
+[data-theme="retro"] .overlay {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+[data-theme="retro"] .overlay-panel {
+  background: var(--panel);
+  border: 4px solid var(--black);
+  box-shadow: 8px 8px 0 var(--shadow);
+}
+
+[data-theme="retro"] .overlay-panel h2 {
+  font-size: 12px;
+  color: var(--yellow);
+}
+
+[data-theme="retro"] .overlay-panel p {
+  font-size: 8px;
+  line-height: 1.8;
+}
+
+[data-theme="retro"] .color-btn {
+  border: 3px solid var(--black);
+  box-shadow: 4px 4px 0 var(--shadow);
+  transition: transform 0.1s ease;
+}
+
+[data-theme="retro"] .color-btn:hover {
+  transform: scale(1.08);
+}
+
+[data-theme="retro"] .color-btn.red {
+  background: var(--red);
+}
+
+[data-theme="retro"] .color-btn.blue {
+  background: var(--blue);
+}
+
+[data-theme="retro"] .color-btn.green {
+  background: var(--green);
+}
+
+[data-theme="retro"] .color-btn.yellow {
+  background: var(--yellow);
+}
+
+[data-theme="retro"] .turn-rail {
+  border: 3px solid var(--black);
+  box-shadow: 4px 4px 0 var(--shadow);
+  background: var(--panel);
+}
+
+[data-theme="retro"] .turn-rail .turn-slot {
+  box-shadow: none;
+  background: var(--panel);
+  color: var(--muted);
+  opacity: 0.45;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+[data-theme="retro"] .turn-rail .turn-slot + .turn-slot {
+  border-top: 3px solid var(--black);
+}
+
+[data-theme="retro"] .turn-rail .turn-slot.active {
+  opacity: 1;
+}
+
+[data-theme="retro"] .turn-rail .turn-slot.active.cpu {
+  background: var(--red);
+  color: #fff;
+}
+
+[data-theme="retro"] .turn-rail .turn-slot.active.human {
+  background: var(--green);
+  color: #fff;
+}
+
+[data-theme="retro"] .turn-rail .turn-slot.active.human-uno {
+  background: var(--yellow);
+  color: var(--black);
+  animation: retro-pulse 0.8s ease-in-out infinite alternate;
+}
+
+[data-theme="retro"] .turn-slot-label {
+  font-size: 5px;
+  opacity: 0.85;
+}
+
+[data-theme="retro"] .turn-slot-name {
+  font-size: 8px;
+}
+
+[data-theme="retro"] .turn-slot-detail {
+  font-size: 5px;
+}
+
+[data-theme="retro"] .player-area {
+  border: 3px solid transparent;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+[data-theme="retro"] .player-area.active-turn {
+  border-color: var(--yellow);
+  background: rgba(255, 204, 0, 0.06);
+}
+
+[data-theme="retro"] .player-area.active-turn.cpu-active {
+  border-color: var(--red);
+  background: rgba(229, 37, 33, 0.08);
+}
+
+[data-theme="retro"] .player-area.active-turn.human-active {
+  border-color: var(--green);
+  background: rgba(0, 153, 51, 0.08);
+}
+
+[data-theme="retro"] .landing-title {
+  font-size: 28px;
+  color: var(--yellow);
+  text-shadow: 4px 4px 0 var(--black);
+}
+
+[data-theme="retro"] .landing-tagline {
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.8;
+}
+
+[data-theme="retro"] .landing-about {
+  background: var(--panel);
+  border: 3px solid var(--black);
+  box-shadow: 4px 4px 0 var(--shadow);
+  line-height: 1.9;
+  font-size: 8px;
+}
+
+[data-theme="retro"] .landing-about h2 {
+  font-size: 7px;
+  color: var(--muted);
+}
+
+[data-theme="retro"] .landing-play {
+  border: 3px solid var(--black);
+  box-shadow: 4px 4px 0 var(--shadow);
+  background: var(--green);
+  color: #fff;
+  font-family: inherit;
+  font-size: 10px;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+[data-theme="retro"] .landing-play:hover {
+  background: #00b33c;
+}
+
+[data-theme="retro"] .landing-play:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--shadow);
+}
+
+[data-theme="retro"] .theme-toggle {
+  background: var(--panel);
+  border: 3px solid var(--black);
+  box-shadow: 4px 4px 0 var(--shadow);
+}
+
+[data-theme="retro"] .theme-toggle-btn {
+  padding: 8px 10px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: var(--muted);
+  background: var(--panel);
+}
+
+[data-theme="retro"] .theme-toggle-btn + .theme-toggle-btn {
+  border-left: 3px solid var(--black);
+}
+
+[data-theme="retro"] .theme-toggle-btn[aria-pressed="true"] {
+  background: var(--blue);
+  color: #fff;
+}
+
+[data-theme="retro"] .theme-toggle-btn:hover:not([aria-pressed="true"]) {
+  background: var(--bg);
+}
