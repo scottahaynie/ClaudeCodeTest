@@ -1,4 +1,7 @@
 import type { ThemeId } from '../context/ThemeProvider';
+import oinkAltUrl from '../assets/sounds/john-pork/oink-alt.mp3?url';
+import oinkShortUrl from '../assets/sounds/john-pork/oink-short.mp3?url';
+import fartQuickUrl from '../assets/sounds/john-pork/fart-quick.mp3?url';
 
 type OscType = OscillatorType;
 
@@ -6,13 +9,14 @@ type OscType = OscillatorType;
 type SoundPackId = 'default' | 'john-pork';
 
 const JOHN_PORK_SAMPLES = {
-  short: `${import.meta.env.BASE_URL}sounds/john-pork/oink-short.mp3`,
-  fart: `${import.meta.env.BASE_URL}sounds/john-pork/fart-quick.mp3`,
-  alt: `${import.meta.env.BASE_URL}sounds/john-pork/oink-alt.mp3`,
+  short: oinkShortUrl,
+  fart: fartQuickUrl,
+  alt: oinkAltUrl,
 } as const;
 
 let ctx: AudioContext | null = null;
 let activePack: SoundPackId = 'default';
+let preloadFailed = false;
 const sampleCache = new Map<string, AudioBuffer>();
 
 /** Maps a visual theme to its sound pack. */
@@ -67,21 +71,25 @@ export function setSoundTheme(theme: ThemeId): void {
 /** Fetches and decodes John Pork sample files into the audio cache. */
 async function preloadJohnPorkSamples(): Promise<void> {
   const audio = ctx;
-  if (!audio) return;
+  if (!audio || preloadFailed) return;
 
-  await Promise.all(
-    Object.values(JOHN_PORK_SAMPLES).map(async (url) => {
-      if (sampleCache.has(url)) return;
-      try {
+  try {
+    await Promise.all(
+      Object.values(JOHN_PORK_SAMPLES).map(async (url) => {
+        if (sampleCache.has(url)) return;
         const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to load ${url}: ${response.status}`);
+        }
         const data = await response.arrayBuffer();
         const buffer = await audio.decodeAudioData(data);
         sampleCache.set(url, buffer);
-      } catch {
-        /* sample unavailable — fall back to synth on play */
-      }
-    }),
-  );
+      }),
+    );
+  } catch {
+    preloadFailed = true;
+    /* sample unavailable — fall back to synth on play */
+  }
 }
 
 /** Plays a cached sample at the given volume, optionally after a delay. */
@@ -89,7 +97,11 @@ function playSample(url: string, volume = 0.55, delay = 0): void {
   withRunningAudio((audio) => {
     const buffer = sampleCache.get(url);
     if (!buffer) {
-      void preloadJohnPorkSamples().then(() => playSample(url, volume, delay));
+      if (!preloadFailed) {
+        void preloadJohnPorkSamples().then(() => playSample(url, volume, delay));
+      } else {
+        playTone(660, 0.08, { volume: 0.14, type: 'square' });
+      }
       return;
     }
 
