@@ -2,8 +2,11 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
+const base = process.env.BASE_PATH ?? '/';
+
 // https://vite.dev/config/
 export default defineConfig({
+  base,
   plugins: [
     react(),
     VitePWA({
@@ -17,7 +20,8 @@ export default defineConfig({
         background_color: '#eef0f8',
         display: 'standalone',
         orientation: 'any',
-        start_url: '/',
+        start_url: base,
+        scope: base,
         icons: [
           {
             src: 'pwa-192.png',
@@ -40,7 +44,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,mp3,woff,woff2,txt}'],
         navigateFallback: 'index.html',
-        navigateFallbackDenylist: [/^\/sounds\//],
+        navigateFallbackDenylist: [new RegExp(`${base.replace(/\/$/, '')}/sounds/`)],
       },
     }),
   ],
