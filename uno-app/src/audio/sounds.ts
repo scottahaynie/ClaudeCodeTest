@@ -1,7 +1,7 @@
 import type { ThemeId } from '../context/ThemeProvider';
-import oinkAltUrl from '../assets/sounds/john-pork/oink-alt.mp3?url';
-import oinkShortUrl from '../assets/sounds/john-pork/oink-short.mp3?url';
-import fartQuickUrl from '../assets/sounds/john-pork/fart-quick.mp3?url';
+import oinkAltData from '../assets/sounds/john-pork/oink-alt.mp3?inline';
+import oinkShortData from '../assets/sounds/john-pork/oink-short.mp3?inline';
+import fartQuickData from '../assets/sounds/john-pork/fart-quick.mp3?inline';
 
 type OscType = OscillatorType;
 
@@ -9,14 +9,17 @@ type OscType = OscillatorType;
 type SoundPackId = 'default' | 'john-pork';
 
 const JOHN_PORK_SAMPLES = {
-  short: oinkShortUrl,
-  fart: fartQuickUrl,
-  alt: oinkAltUrl,
+  short: oinkShortData,
+  fart: fartQuickData,
+  alt: oinkAltData,
 } as const;
+
+type SampleKey = keyof typeof JOHN_PORK_SAMPLES;
 
 let ctx: AudioContext | null = null;
 let activePack: SoundPackId = 'default';
-let preloadFailed = false;
+let preloadState: 'idle' | 'loading' | 'ready' | 'failed' = 'idle';
+let preloadPromise: Promise<void> | null = null;
 const sampleCache = new Map<string, AudioBuffer>();
 
 /** Maps a visual theme to its sound pack. */
@@ -48,6 +51,42 @@ function withRunningAudio(play: (audio: AudioContext) => void): void {
   }
 }
 
+/** Decodes an inlined data-URL sample into the audio cache. */
+async function decodeSample(audio: AudioContext, dataUrl: string): Promise<AudioBuffer> {
+  const response = await fetch(dataUrl);
+  const data = await response.arrayBuffer();
+  return audio.decodeAudioData(data);
+}
+
+/** Loads inlined John Pork samples once; never retries after failure. */
+async function preloadJohnPorkSamples(): Promise<void> {
+  if (preloadState === 'ready' || preloadState === 'failed') return;
+  if (preloadPromise) return preloadPromise;
+
+  const audio = ctx;
+  if (!audio) return;
+
+  preloadState = 'loading';
+  preloadPromise = (async () => {
+    try {
+      const entries = Object.entries(JOHN_PORK_SAMPLES) as [SampleKey, string][];
+      await Promise.all(
+        entries.map(async ([, dataUrl]) => {
+          if (sampleCache.has(dataUrl)) return;
+          const buffer = await decodeSample(audio, dataUrl);
+          sampleCache.set(dataUrl, buffer);
+        }),
+      );
+      preloadState = 'ready';
+    } catch {
+      preloadState = 'failed';
+      sampleCache.clear();
+    }
+  })();
+
+  return preloadPromise;
+}
+
 /** Resume audio after a user gesture (required by browser autoplay policies). */
 export function unlockAudio(): void {
   const audio = getContext();
@@ -68,39 +107,13 @@ export function setSoundTheme(theme: ThemeId): void {
   }
 }
 
-/** Fetches and decodes John Pork sample files into the audio cache. */
-async function preloadJohnPorkSamples(): Promise<void> {
-  const audio = ctx;
-  if (!audio || preloadFailed) return;
-
-  try {
-    await Promise.all(
-      Object.values(JOHN_PORK_SAMPLES).map(async (url) => {
-        if (sampleCache.has(url)) return;
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`Failed to load ${url}: ${response.status}`);
-        }
-        const data = await response.arrayBuffer();
-        const buffer = await audio.decodeAudioData(data);
-        sampleCache.set(url, buffer);
-      }),
-    );
-  } catch {
-    preloadFailed = true;
-    /* sample unavailable — fall back to synth on play */
-  }
-}
-
 /** Plays a cached sample at the given volume, optionally after a delay. */
-function playSample(url: string, volume = 0.55, delay = 0): void {
+function playSample(dataUrl: string, volume = 0.55, delay = 0): void {
   withRunningAudio((audio) => {
-    const buffer = sampleCache.get(url);
+    const buffer = sampleCache.get(dataUrl);
     if (!buffer) {
-      if (!preloadFailed) {
-        void preloadJohnPorkSamples().then(() => playSample(url, volume, delay));
-      } else {
-        playTone(660, 0.08, { volume: 0.14, type: 'square' });
+      if (preloadState !== 'failed') {
+        void preloadJohnPorkSamples();
       }
       return;
     }
@@ -229,7 +242,12 @@ const johnPorkSounds = {
 };
 
 function getActiveSounds() {
-  return activePack === 'john-pork' ? johnPorkSounds : defaultSounds;
+  if (activePack === 'john-pork') {
+    if (preloadState === 'ready') return johnPorkSounds;
+    if (preloadState !== 'failed') void preloadJohnPorkSamples();
+    return defaultSounds;
+  }
+  return defaultSounds;
 }
 
 export const sounds = {
